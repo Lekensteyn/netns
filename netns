@@ -146,9 +146,14 @@ exec)
     if [ -n "${SUDO_USER:-}" ]; then
         # If no command is given, enter the shell
         [ $# -gt 0 ] || set -- -s
-        # Change user back
-        set -- sudo -u "$SUDO_USER" "$@"
+        # Change user back, preserving environment (except HOME)
+        set -- sudo -EH -u "$SUDO_USER" "$@"
     fi
+
+    # Set environment variables from a separate file (if existent)
+    envfile=$(dirname "$0")/env.sh
+    [ ! -e "$envfile" ] || . "$envfile"
+
     exec nsenter --net=$ns_file "$@"
     ;;
 *)
