@@ -1,0 +1,158 @@
+#!/bin/bash
+# Create a network namespace with two interfaces.
+# Copyright (C) 2015 Peter Wu <peter@lekensteyn.nl>
+#
+# Helpful article:
+# "Namespaces in operation, part 7: Network namespaces [LWN.net]"
+# by Jake Edge, January 22, 2014. Retrieved February 14, 2015.
+# https://lwn.net/Articles/580893/
+
+print_usage() {
+    cat <<EOF
+Usage: $0 ns-no [dry-]{start|stop}
+       $0 ns-no status
+       $0 ns-no run command [command args]
+
+The namespace number must be between 0 and 255 (inclusive)
+For namespace number 4, the layout will be:
+
+  (host)      veth8 (10.9.4.1)
+                |
+           [ netns: ns4 ]
+                |
+(namespace)   veth9 (10.9.4.2)
+EOF
+}
+
+cmd_exec() {
+    echo "# $*"
+    if [[ $action != dry-* ]]; then
+        "$@"
+    fi
+}
+
+rollback_cmds=()
+_run_rollbacks() {
+    local cmd
+    [ ${#rollback_cmds[@]} -gt 0 ] || return
+    # Run all "undo" commands if any.
+    for cmd in "${rollback_cmds[@]}"; do
+        eval cmd_exec "$cmd" || :
+    done
+    rollback_cmds=()
+}
+
+D() {
+    local cmd="$(printf '%q ' "$@")"
+    # Record all "undo" commands.
+    if [ ${#rollback_cmds[@]} -gt 0 ]; then
+        rollback_cmds=( "$cmd" "${rollback_cmds[@]}" )
+    else
+        rollback_cmds=( "$cmd" )
+    fi
+}
+
+load_vars() {
+    # Always choose an even interface number here (starting at 0)
+    if_no=$((2*$ns_no))
+    ns="netns$ns_no"
+    ns_file=/var/run/netns/$ns
+    if_host="veth$((if_no))"
+    if_peer="veth$((if_no+1))"
+    addr_host="10.9.$((ns_no)).1/24"
+    addr_peer="10.9.$((ns_no)).2/24"
+}
+
+# A() and finish() must be defined before calling ns_cmds
+ns_cmds() {
+    load_vars
+
+    # Create netns
+    A ip netns add $ns
+    D ip netns del $ns
+    # Enable loopback in netns
+    #ip netns exec $ns ip link set dev lo up
+
+    # Create veth pair
+    A ip link add $if_host type veth peer name $if_peer
+    D ip link del $if_host
+    A ip link set $if_peer netns $ns
+
+    # Assign addresses and set default route
+    A ip link set $if_host up
+    A ip addr add $addr_host dev $if_host
+    A ip netns exec $ns \
+      ip link set $if_peer up
+    A ip netns exec $ns \
+      ip addr add $addr_peer dev $if_peer
+    A ip netns exec $ns \
+      ip route add default via ${addr_host%/*} dev $if_peer
+
+    # Forward traffic
+    A iptables -t nat -A POSTROUTING -o $if_host -j MASQUERADE
+    D iptables -t nat -D POSTROUTING -o $if_host -j MASQUERADE
+    A iptables -A FORWARD -i $if_host -j ACCEPT
+    D iptables -D FORWARD -i $if_host -j ACCEPT
+    A iptables -A FORWARD -o $if_host -j ACCEPT
+    D iptables -D FORWARD -o $if_host -j ACCEPT
+
+    finish
+}
+
+### MAIN ###
+ns_no=$1
+action=$2
+shift 2
+set -e -u
+
+if ! [[ $ns_no =~ ^[0-9]{1,3}$ ]] || [ $ns_no -gt 255 ]; then
+    [ -z "$ns_no" ] || echo "Namespace number must be between 0 and 255"
+    print_usage
+    exit 1
+fi
+case $action in
+start|dry-start)
+    trap _run_rollbacks EXIT
+    A() { cmd_exec "$@"; }
+    # Every command was successfully executed, no need to rollback.
+    finish() { rollback_cmds=(); trap EXIT; echo "# Done!"; }
+    ns_cmds
+    ;;
+stop|dry-stop)
+    # Ignore start commands
+    A() { :; }
+    # All undo commands have been gathered, execute them.
+    finish() { _run_rollbacks; echo "# Done!"; }
+    ns_cmds
+    ;;
+status)
+    load_vars
+    if [ ! -e $ns_file ]; then
+        echo "Namespace '$ns' is inactive."
+        exit 0
+    fi
+    ip netns pids $ns | xargs -r ps u
+    cmd_exec ip netns exec $ns ip link
+    cmd_exec ip netns exec $ns ip addr
+    cmd_exec ip netns exec $ns ip route
+    ;;
+run)
+    load_vars
+    if [ ! -e $ns_file ]; then
+        echo "Namespace '$ns' does not exist"
+        echo "Run: $0 $ns_no start"
+        exit 1
+    fi
+    if [ -n "${SUDO_USER:-}" ]; then
+        # If no command is given, enter the shell
+        [ $# -gt 0 ] || set -- -s
+        # Change user back
+        set -- sudo -u "$SUDO_USER" "$@"
+    fi
+    exec nsenter --net=$ns_file "$@"
+    ;;
+*)
+    print_usage
+    exit 1
+    ;;
+esac
