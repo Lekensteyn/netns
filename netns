@@ -11,7 +11,7 @@ print_usage() {
     cat <<EOF
 Usage: $0 ns-no [dry-]{start|stop}
        $0 ns-no status
-       $0 ns-no run command [command args]
+       $0 ns-no exec [command [command args]]
 
 The namespace number must be between 0 and 255 (inclusive)
 For namespace number 4, the layout will be:
@@ -136,7 +136,7 @@ status)
     cmd_exec ip netns exec $ns ip addr
     cmd_exec ip netns exec $ns ip route
     ;;
-run)
+exec)
     load_vars
     if [ ! -e $ns_file ]; then
         echo "Namespace '$ns' does not exist"
