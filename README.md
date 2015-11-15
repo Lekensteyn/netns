@@ -88,3 +88,8 @@ To use the `ip netns identify` command as a regular user, the permissions of
 
     sudo setfacl -m u:$USER:rx /var/run/netns
 
+See also
+--------
+"Namespaces in operation, part 7: Network namespaces [LWN.net]"
+by Jake Edge, January 22, 2014. Retrieved February 14, 2015.
+https://lwn.net/Articles/580893/
