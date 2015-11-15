@@ -1,5 +1,5 @@
 netns
------
+=====
 netns is a utility that allows you to quickly setup a network namespace. It was
 written for the purpose of capturing network traffic from a single application
 (using tcpdump / dumpcap).
@@ -70,3 +70,21 @@ Run it without arguments to get usage information:
                [ netns: ns4 ]
                     |
     (namespace)   veth9 (10.9.4.2)
+
+bash prompt
+-----------
+To help you identify whether your shell is in a namespace, you can look at the
+output of `ip link`.
+
+For your convenience, you can also make the prompt display the network namespace
+name by putting this in your `~/.bashrc`:
+
+    _ns_name=$(ip netns identify 2>/dev/null)
+    PS1=${_ns_name:+(${_ns_name})}${PS1}
+    unset _ns_name
+
+To use the `ip netns identify` command as a regular user, the permissions of
+`/var/run/netns` need to be adjusted. For example:
+
+    sudo setfacl -m u:$USER:rx /var/run/netns
+
