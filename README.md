@@ -38,6 +38,8 @@ Start network namespace:
         inet6 fe80::3413:bdff:fec5:2fe8/64 scope link
            valid_lft forever preferred_lft forever
 
+**For access to external (LAN or internet) hosts, see below**.
+
 Enter the network namespace. It uses sudo to change the user back to the
 original user:
 
@@ -70,6 +72,25 @@ Run it without arguments to get usage information:
                [ netns: ns4 ]
                     |
     (namespace)   veth9 (10.9.4.2)
+
+
+External access
+---------------
+The default setup only facilitates communication between the network namespace
+and the main host where the commands are run. To enable access from the network
+namespace to external hosts, you must allow IP forwarding and enable NAT for
+outgoing packets over the default interface (e.g. eth0, ens3 or wlan0). This has
+to be done *only* once (changes are persisted until the next reboot):
+
+    sudo sysctl net.ipv4.ip_forward=1
+    sudo iptables -t nat -A POSTROUTING -o ens3 -j MASQUERADE
+
+On some systems, the default DNS servers point to a local resolver (`127.0.0.53`
+on Ubuntu 18.04). As the network namespace does not have such a local resolver,
+you should probably change `/etc/resolv.conf` to something like:
+
+    nameserver 1.1.1.1
+
 
 bash prompt
 -----------
