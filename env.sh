@@ -17,7 +17,7 @@ dbus_addr() {
     x_display=${x_display%.*}
     dbus_file="$home/.dbus/session-bus/$(cat /etc/machine-id)-${x_display}"
 
-    env_re='^DBUS_SESSION_BUS_ADDRESS=unix:abstract=\K/tmp/dbus-[a-zA-Z0-9]+'
+    env_re="^DBUS_SESSION_BUS_ADDRESS=['\"]?unix:abstract=\\K/tmp/dbus-[a-zA-Z0-9]+"
 
     abstract_path=
     if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -e "$dbus_file" ]; then
