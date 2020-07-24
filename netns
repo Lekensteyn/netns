@@ -71,7 +71,7 @@ ns_cmds() {
     A ip netns add $ns
     D ip netns del $ns
     # Enable loopback in netns
-    #ip netns exec $ns ip link set dev lo up
+    ip netns exec $ns ip link set dev lo up
 
     # Create veth pair
     A ip link add $if_host type veth peer name $if_peer
